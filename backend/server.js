@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import couchbase from 'couchbase';
 
 let cluster, bucket, collection;
@@ -10,8 +11,21 @@ let cluster, bucket, collection;
   // Varsayılan kapsam ve koleksiyon (Capella Türkçe arayüzde _varsayılan olabilir, İngilizce _default)
   collection = bucket.scope('_varsayılan').collection('_varsayılan');
 })();
+=======
+
+import express from 'express';
+import cors from 'cors';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Online kullanıcılar (isim listesi)
+let onlineUsers = [];
+>>>>>>> a5664f15adf3c7e51f1a18f80c5b5f7cb67b5fa2
 
 
+<<<<<<< HEAD
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
@@ -20,6 +34,12 @@ import { Server } from 'socket.io';
 const app = express();
 app.use(cors());
 app.use(express.json());
+=======
+// Online kullanıcıları getir
+app.get('/api/online-users', (req, res) => {
+  res.json(onlineUsers);
+});
+>>>>>>> a5664f15adf3c7e51f1a18f80c5b5f7cb67b5fa2
 
 
 // --- Ortak veri ---
