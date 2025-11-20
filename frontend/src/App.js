@@ -10,7 +10,7 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
 
   useEffect(() => {
-    axios.get(`${API_BASE}/api/channels`).then(res => setChannels(res.data));
+    axios.get(`${iscord-clone-backend.vercel.app}/api/channels`).then(res => setChannels(res.data));
   }, []);
 
   useEffect(() => {
@@ -62,3 +62,4 @@ function App() {
 }
 
 export default App;
+
