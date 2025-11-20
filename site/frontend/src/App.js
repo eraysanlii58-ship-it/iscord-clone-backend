@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-const API_BASE = 'VERCEL_BACKEND_URL'; // Buraya Vercel'deki backend API adresinizi yazın
+const API_BASE = 'https://iscord-clone-backend.vercel.app'; // Buraya Vercel'deki backend API adresinizi yazın
 
 function App() {
   const [channels, setChannels] = useState([]);
@@ -62,3 +62,4 @@ function App() {
 }
 
 export default App;
+
