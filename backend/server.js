@@ -1,3 +1,11 @@
+
+import express from 'express';
+import cors from 'cors';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
 // Online kullanıcılar (isim listesi)
 let onlineUsers = [];
 
@@ -15,12 +23,6 @@ app.post('/api/online-users', (req, res) => {
 app.get('/api/online-users', (req, res) => {
   res.json(onlineUsers);
 });
-import express from 'express';
-import cors from 'cors';
-
-const app = express();
-app.use(cors());
-app.use(express.json());
 
 // Dummy data
 let users = [
