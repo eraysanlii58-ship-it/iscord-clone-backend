@@ -35,6 +35,7 @@ app.get('/api/messages/:channelId', (req, res) => {
   res.json(channelMessages);
 });
 
+
 app.post('/api/messages', (req, res) => {
   const { channelId, userId, text } = req.body;
   const newMsg = {
