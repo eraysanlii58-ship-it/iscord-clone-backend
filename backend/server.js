@@ -1,3 +1,20 @@
+// Online kullanıcılar (isim listesi)
+let onlineUsers = [];
+
+// Online kullanıcı ekle
+app.post('/api/online-users', (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'username gerekli' });
+  if (!onlineUsers.includes(username)) {
+    onlineUsers.push(username);
+  }
+  res.json({ success: true });
+});
+
+// Online kullanıcıları getir
+app.get('/api/online-users', (req, res) => {
+  res.json(onlineUsers);
+});
 import express from 'express';
 import cors from 'cors';
 
