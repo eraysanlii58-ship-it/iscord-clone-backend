@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
 
 const API_BASE = 'https://iscord-clone-backend-two.vercel.app';
-const SOCKET_URL = 'https://iscord-clone-backend-two.vercel.app'; // Vercel'de backend URL'si
 
 function App() {
   const [channels, setChannels] = useState([]);
@@ -11,25 +9,53 @@ function App() {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [onlineCount, setOnlineCount] = useState(0);
+  const [username, setUsername] = useState(localStorage.getItem('username') || '');
+  const [isActive, setIsActive] = useState(!!localStorage.getItem('username'));
 
+  // Çevrim içi kullanıcı sayısını her 2 saniyede bir güncelle
   useEffect(() => {
-    const socket = io(SOCKET_URL);
-    socket.on('onlineUsers', (count) => {
-      setOnlineCount(count);
+    if (!isActive) return;
+    let interval = setInterval(() => {
+      axios.get(`${API_BASE}/api/online-users`).then(res => {
+        setOnlineCount(res.data.length);
+      });
+    }, 2000);
+    // İlk yüklemede de çek
+    axios.get(`${API_BASE}/api/online-users`).then(res => {
+      setOnlineCount(res.data.length);
     });
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  // Aktif olunca backend'e bildir
+  const handleActivate = async () => {
+    if (!username) return;
+    try {
+      await axios.post(`${API_BASE}/api/online-users`, { username });
+      localStorage.setItem('username', username);
+      setIsActive(true);
+    } catch (e) {
+      alert('Aktif olma sırasında bir hata oluştu.');
+    }
+  };
 
   useEffect(() => {
     axios.get(`${API_BASE}/api/channels`).then(res => setChannels(res.data));
   }, []);
 
   useEffect(() => {
+    let interval;
     if (selectedChannel) {
+      // İlk yüklemede hemen çek
       axios.get(`${API_BASE}/api/messages/${selectedChannel.id}`).then(res => setMessages(res.data));
+      // Sonra her 2 saniyede bir çek
+      interval = setInterval(() => {
+        axios.get(`${API_BASE}/api/messages/${selectedChannel.id}`).then(res => setMessages(res.data));
+      }, 2000);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [selectedChannel]);
 
   const sendMessage = () => {
@@ -43,6 +69,16 @@ function App() {
       setNewMessage('');
     });
   };
+
+  if (!isActive) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#23272a', color: '#fff', flexDirection: 'column' }}>
+        <h2>İsminizi girin ve aktif olun</h2>
+        <input value={username} onChange={e => setUsername(e.target.value)} style={{ padding: 8, borderRadius: 4, border: 'none', marginBottom: 12 }} placeholder="Kullanıcı adı" />
+        <button onClick={handleActivate} style={{ padding: '8px 16px', borderRadius: 4, background: '#7289da', color: '#fff', border: 'none' }}>Aktif Ol</button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial' }}>
@@ -68,7 +104,17 @@ function App() {
         </div>
         {selectedChannel && (
           <div style={{ padding: 16, borderTop: '1px solid #222', display: 'flex' }}>
-            <input value={newMessage} onChange={e => setNewMessage(e.target.value)} style={{ flex: 1, marginRight: 8, padding: 8, borderRadius: 4, border: 'none' }} placeholder="Mesaj yaz..." />
+            <input
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  sendMessage();
+                }
+              }}
+              style={{ flex: 1, marginRight: 8, padding: 8, borderRadius: 4, border: 'none' }}
+              placeholder="Mesaj yaz..."
+            />
             <button onClick={sendMessage} style={{ padding: '8px 16px', borderRadius: 4, background: '#7289da', color: '#fff', border: 'none' }}>Gönder</button>
           </div>
         )}
