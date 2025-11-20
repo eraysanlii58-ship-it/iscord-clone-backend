@@ -1,10 +1,152 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 
-const API_BASE = 'https://iscord-clone-backend-two.vercel.app';
+import React, { useEffect, useState, useRef } from 'react';
+import axios from 'axios';
+import { io } from 'socket.io-client';
+
+const API_BASE = 'https://iscord-clone-backend-two.vercel.app'; // Heroku adresinizle değiştirin
+const SOCKET_URL = API_BASE.replace(/\/api.*/, '');
 
 function App() {
   const [channels, setChannels] = useState([]);
+    // Sesli sohbet state
+    const [inVoice, setInVoice] = useState(false);
+    const [voiceUsers, setVoiceUsers] = useState([]);
+    const [micOn, setMicOn] = useState(false);
+    const localStream = useRef(null);
+    const socketRef = useRef(null);
+    const peersRef = useRef({}); // { peerId: RTCPeerConnection }
+    const [remoteAudios, setRemoteAudios] = useState([]); // [{peerId, stream}]
+      // WebRTC peer bağlantısı ve sinyalizasyon yönetimi
+      useEffect(() => {
+        if (!inVoice || !socketRef.current) return;
+        const socket = socketRef.current;
+
+        // Odaya katıldığında mevcut peer'ları al
+        socket.on('peers-in-room', async (peerIds) => {
+          for (const peerId of peerIds) {
+            await createPeerConnection(peerId, true);
+          }
+        });
+
+        // Offer al
+        socket.on('webrtc-offer', async ({ from, offer }) => {
+          await createPeerConnection(from, false, offer);
+        });
+        // Answer al
+        socket.on('webrtc-answer', ({ from, answer }) => {
+          const pc = peersRef.current[from];
+          if (pc) pc.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+        // ICE candidate al
+        socket.on('webrtc-candidate', ({ from, candidate }) => {
+          const pc = peersRef.current[from];
+          if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+
+        return () => {
+          socket.off('peers-in-room');
+          socket.off('webrtc-offer');
+          socket.off('webrtc-answer');
+          socket.off('webrtc-candidate');
+          // Peer bağlantılarını temizle
+          Object.values(peersRef.current).forEach(pc => pc.close());
+          peersRef.current = {};
+          setRemoteAudios([]);
+        };
+      }, [inVoice]);
+
+      // Peer bağlantısı oluşturucu
+      const createPeerConnection = async (peerId, isInitiator, remoteOffer) => {
+        if (peersRef.current[peerId]) return peersRef.current[peerId];
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        peersRef.current[peerId] = pc;
+        // Mikrofonu ekle
+        if (localStream.current) {
+          localStream.current.getTracks().forEach(track => pc.addTrack(track, localStream.current));
+        }
+        // ICE candidate gönder
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            socketRef.current.emit('webrtc-candidate', { to: peerId, from: socketRef.current.id, candidate: e.candidate });
+          }
+        };
+        // Remote stream geldiğinde <audio> için state'e ekle
+        pc.ontrack = (e) => {
+          setRemoteAudios(prev => {
+            // Aynı peerId için tekrar ekleme
+            if (prev.some(a => a.peerId === peerId)) return prev;
+            return [...prev, { peerId, stream: e.streams[0] }];
+          });
+        };
+        if (isInitiator) {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current.emit('webrtc-offer', { to: peerId, from: socketRef.current.id, offer });
+        } else if (remoteOffer) {
+          await pc.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socketRef.current.emit('webrtc-answer', { to: peerId, from: socketRef.current.id, answer });
+        }
+        return pc;
+      };
+    // Socket.io bağlantısı (yalnızca aktif kullanıcı için başlatılır)
+    useEffect(() => {
+      if (!isActive) return;
+      if (!socketRef.current) {
+        socketRef.current = io(SOCKET_URL);
+      }
+      const socket = socketRef.current;
+      // Sesli oda kullanıcılarını dinle
+      socket.on('voice-users', users => setVoiceUsers(users));
+      return () => {
+        socket.disconnect();
+        socketRef.current = null;
+      };
+    }, [isActive]);
+
+    // Sesli sohbete katıl/ayrıl
+    const handleJoinVoice = async () => {
+      if (!socketRef.current || !selectedChannel) return;
+      // Mikrofonu açmadan odaya katılma
+      if (!micOn) await handleToggleMic();
+      socketRef.current.emit('join-voice', `channel-${selectedChannel.id}`, username);
+      setInVoice(true);
+    };
+    const handleLeaveVoice = () => {
+      if (!socketRef.current) return;
+      socketRef.current.emit('leave-voice');
+      setInVoice(false);
+      setVoiceUsers([]);
+      // Peer bağlantılarını kapat
+      Object.values(peersRef.current).forEach(pc => pc.close());
+      peersRef.current = {};
+      setRemoteAudios([]);
+      if (localStream.current) {
+        localStream.current.getTracks().forEach(track => track.stop());
+        localStream.current = null;
+      }
+      setMicOn(false);
+    };
+
+    // Mikrofon aç/kapat
+    const handleToggleMic = async () => {
+      if (!micOn) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          localStream.current = stream;
+          setMicOn(true);
+        } catch (err) {
+          alert('Mikrofon açılamadı: ' + err.message);
+        }
+      } else {
+        if (localStream.current) {
+          localStream.current.getTracks().forEach(track => track.stop());
+          localStream.current = null;
+        }
+        setMicOn(false);
+      }
+    };
   const [messages, setMessages] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [newMessage, setNewMessage] = useState('');
@@ -103,20 +245,40 @@ function App() {
           ))}
         </div>
         {selectedChannel && (
-          <div style={{ padding: 16, borderTop: '1px solid #222', display: 'flex' }}>
-            <input
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  sendMessage();
-                }
-              }}
-              style={{ flex: 1, marginRight: 8, padding: 8, borderRadius: 4, border: 'none' }}
-              placeholder="Mesaj yaz..."
-            />
-            <button onClick={sendMessage} style={{ padding: '8px 16px', borderRadius: 4, background: '#7289da', color: '#fff', border: 'none' }}>Gönder</button>
-          </div>
+          <>
+            {/* Sesli Sohbet Alanı */}
+            <div style={{ padding: 16, borderTop: '1px solid #222', display: 'flex', alignItems: 'center', background: '#23272a' }}>
+              <b>Sesli Sohbet:</b>
+              {!inVoice ? (
+                <button onClick={handleJoinVoice} style={{ marginLeft: 12, padding: '6px 12px', borderRadius: 4, background: '#43b581', color: '#fff', border: 'none' }}>Katıl</button>
+              ) : (
+                <>
+                  <button onClick={handleLeaveVoice} style={{ marginLeft: 12, padding: '6px 12px', borderRadius: 4, background: '#f04747', color: '#fff', border: 'none' }}>Ayrıl</button>
+                  <button onClick={handleToggleMic} style={{ marginLeft: 12, padding: '6px 12px', borderRadius: 4, background: micOn ? '#43b581' : '#7289da', color: '#fff', border: 'none' }}>{micOn ? 'Mikrofonu Kapat' : 'Mikrofonu Aç'}</button>
+                  <span style={{ marginLeft: 16, color: '#fff' }}>Odada: {voiceUsers.join(', ') || 'Yalnızsınız'}</span>
+                  {/* Diğer kullanıcıların sesi */}
+                  {remoteAudios.map(({ peerId, stream }) => (
+                    <audio key={peerId} autoPlay controls style={{ display: 'none' }} ref={el => { if (el && stream) el.srcObject = stream; }} />
+                  ))}
+                </>
+              )}
+            </div>
+            {/* Mesaj Alanı */}
+            <div style={{ padding: 16, borderTop: '1px solid #222', display: 'flex' }}>
+              <input
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    sendMessage();
+                  }
+                }}
+                style={{ flex: 1, marginRight: 8, padding: 8, borderRadius: 4, border: 'none' }}
+                placeholder="Mesaj yaz..."
+              />
+              <button onClick={sendMessage} style={{ padding: '8px 16px', borderRadius: 4, background: '#7289da', color: '#fff', border: 'none' }}>Gönder</button>
+            </div>
+          </>
         )}
       </div>
     </div>
