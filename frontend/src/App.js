@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-const API_BASE = 'https://iscord-clone-backend.vercel.app';
+const API_BASE = 'https://iscord-clone-backend-two.vercel.app';
 
 function App() {
   const [channels, setChannels] = useState([]);
