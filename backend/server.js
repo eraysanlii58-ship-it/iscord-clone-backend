@@ -77,6 +77,10 @@ app.get('/', (req, res) => {
   res.send('Discord benzeri backend API çalışıyor!');
 });
 
+<<<<<<< HEAD
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+=======
+export default app;
+>>>>>>> 9f9f86c3 (Vercel uyumlu backend: app.listen kaldırıldı, export default app eklendi)
