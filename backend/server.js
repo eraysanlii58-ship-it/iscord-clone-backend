@@ -93,11 +93,15 @@ const io = new Server(server, {
 });
 let voiceUsers = {};
 io.on('connection', (socket) => {
+  // --- Sesli sohbet oda yönetimi ---
   socket.on('join-voice', (room, username) => {
     socket.join(room);
     voiceUsers[socket.id] = { room, username };
     const usersInRoom = Object.values(voiceUsers).filter(u => u.room === room).map(u => u.username);
     io.to(room).emit('voice-users', usersInRoom);
+    // Odaya yeni katılan kullanıcıya mevcut kullanıcıların socket.id'lerini bildir
+    const peerIds = Object.keys(voiceUsers).filter(id => voiceUsers[id].room === room && id !== socket.id);
+    socket.emit('peers-in-room', peerIds);
   });
   socket.on('leave-voice', () => {
     const user = voiceUsers[socket.id];
@@ -116,6 +120,17 @@ io.on('connection', (socket) => {
       const usersInRoom = Object.values(voiceUsers).filter(u => u.room === room).map(u => u.username);
       io.to(room).emit('voice-users', usersInRoom);
     }
+  });
+
+  // --- WebRTC sinyalizasyon ---
+  socket.on('webrtc-offer', ({ to, from, offer }) => {
+    io.to(to).emit('webrtc-offer', { from, offer });
+  });
+  socket.on('webrtc-answer', ({ to, from, answer }) => {
+    io.to(to).emit('webrtc-answer', { from, answer });
+  });
+  socket.on('webrtc-candidate', ({ to, from, candidate }) => {
+    io.to(to).emit('webrtc-candidate', { from, candidate });
   });
 });
 
